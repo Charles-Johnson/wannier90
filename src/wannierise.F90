@@ -1789,7 +1789,7 @@ contains
     !   Calculate the Gradient of the Wannier Function spread          !
     !                                                                  !
     !===================================================================  
-    use w90_parameters, only : num_wann,wb,bk,nntot,m_matrix,num_kpts,timing_level
+    use w90_parameters, only : num_wann,wb,bk,nntot,m_matrix,num_kpts,timing_level,lamdbac,jprime,r0
     use w90_io,         only : io_stopwatch,io_error
     use w90_parameters, only : lsitesymmetry !RS:
     use w90_sitesym,    only : sitesym_symmetrize_gradient !RS:
@@ -1805,7 +1805,8 @@ contains
 
     !local
     complex(kind=dp), allocatable  :: cr (:,:)   
-    complex(kind=dp), allocatable  :: crt (:,:)  
+    complex(kind=dp), allocatable  :: crt (:,:)
+    real(kind=dp), allocatable :: r0kb(:,:)  
 
     ! local
     integer :: iw,ind,nkp,nn,m,n,ierr,nkp_loc
@@ -1817,6 +1818,8 @@ contains
     if (ierr/=0) call io_error('Error in allocating cr in wann_domega')
     allocate(  crt (num_wann, num_wann),stat=ierr ) 
     if (ierr/=0) call io_error('Error in allocating crt in wann_domega')
+    allocate( r0kb (nntot, num_kpts),stat=ierr )
+    if (ierr/=0) call io_error('Error in allocating r0kb in wann_domega')
 
 
     do nkp_loc = 1, counts(my_node_id)
@@ -1851,10 +1854,12 @@ contains
 
     ! R_mn=M_mn/M_nn and q_m^{k,b} = Im phi_m^{k,b} + b.r_n are calculated
     rnkb = 0.0_dp
+    r0kb = 0.0_dp
     rnkb_loc = 0.0_dp
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn=1,nntot
+          r0kb(nn,nkp) = sum(bk(:,nn,nkp)*r0(:))
           do n=1,num_wann
              rnkb_loc(n,nn,nkp_loc) = sum(bk(:,nn,nkp)*rave(:,n))
           enddo
@@ -1866,28 +1871,37 @@ contains
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn = 1, nntot  
-          do n=1,num_wann
+          do n=1,jprime
              mnn = m_matrix_loc(n,n,nn,nkp_loc)
              crt(:,n) = m_matrix_loc(:,n,nn,nkp_loc) / mnn
              cr(:,n)  = m_matrix_loc(:,n,nn,nkp_loc) * conjg(mnn)
+          enddo
+          do jprime +1, num_wann
+             crt(:,n) = 0
+             cr(:,n) = 0
           enddo
 
           do n = 1, num_wann  
              do m = 1, num_wann  
                 ! A[R^{k,b}]=(R-Rdag)/2
                 cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) &
-                     + wb(nn) * 0.5_dp &
+                     + 0.5_dp &
                      *( cr(m,n) - conjg(cr(n,m)) )
-                ! -S[T^{k,b}]=-(T+Tdag)/2i ; T_mn = Rt_mn q_n
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) -  &
+                ! +(lambdac-1)S[T^{k,b}]=-(T+Tdag)/2i ; T_mn = Rt_mn q_n
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - & 
                       ( crt(m,n) * ln_tmp_loc(n,nn,nkp_loc)  &
                      + conjg( crt(n,m) * ln_tmp_loc(m,nn,nkp_loc) ) ) &
                      * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - wb(nn) &
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + (lambdac - 1) &
                      * ( crt(m,n) * rnkb_loc(n,nn,nkp_loc) + conjg(crt(n,m) &
                      * rnkb_loc(m,nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
+                ! -lambdac S[T_c^{k,b}]
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdac &
+                     * ( crt(m,n) * r0kb(nn,nkp_loc) + conjg(crt(n,m) &
+                     * r0kb(nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
              enddo
           enddo
+          cdodq_loc(:,:,nkp_loc) = cdodq_loc(:,:,nkp_loc) * wb(nn)
        enddo
     enddo
     cdodq_loc = cdodq_loc / real(num_kpts,dp) * 4.0_dp

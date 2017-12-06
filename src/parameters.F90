@@ -46,6 +46,12 @@ module w90_parameters
   !! Number of steps before writing checkpoint
   integer,           public, save :: num_print_cycles
   !! Number of steps between writing output
+  integer,           public, save :: jprime
+  !! Number of objective Wannier functions (others excluded from spread functional)
+  real(kind=dp),     public, save :: lambdac
+  !! Lagrange multiplier for constraining centres
+  real(kind=dp), dimension(1:3), public,save :: r0
+  !! Constrained centres
   character(len=50), public, save :: devel_flag
   ! Adaptive vs. fixed smearing stuff [GP, Jul 12, 2012]
   ! Only internal, always use the local variables defined by each module
@@ -746,6 +752,15 @@ contains
 
     precond=.false.
     call param_get_keyword('precond',found,l_value=precond)
+
+    lambdac=0.0_dp
+    call param_get_keyword('lambdac',found,r_value=lambdac)
+
+    r0=(/0.0_dp,0.0_dp,0.0_dp/)
+    call param_get_keyword('r0',found,a_value=r0)
+
+    jprime=num_wann
+    call param_get_keyword('jprime',found,i_value=jprime)
 
     !%%%%%%%%%
     ! Plotting
