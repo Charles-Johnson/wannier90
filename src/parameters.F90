@@ -757,7 +757,7 @@ contains
     call param_get_keyword('lambdac',found,r_value=lambdac)
 
     r0=(/0.0_dp,0.0_dp,0.0_dp/)
-    call param_get_keyword('r0',found,a_value=r0)
+    call param_get_keyword_vector('r0',found,3,r_value=r0)
 
     jprime=num_wann
     call param_get_keyword('jprime',found,i_value=jprime)
@@ -2298,6 +2298,12 @@ contains
        write(stdout,'(25x,a)') 'No atom positions specified'
     end if
     write(stdout,*) ' '
+       write(stdout,'(32x,a)') '-------------------'
+       write(stdout,'(32x,a)') 'CONSTRAINED CENTRES'
+       write(stdout,'(32x,a)') '-------------------'
+       write(stdout,'(3x,a,F10.5,1x,a1,F10.5,1x,a1,F10.5,6x,a,F10.5)') 'Constrained Centre =',r0(1),',',r0(2),',',r0(3),&
+         'Lagrange Multiplier = ',lambdac
+       
     ! Projections
     if(iprint>1 .and. allocated(proj_site) ) then
        write(stdout,'(32x,a)') '-----------'
@@ -2344,6 +2350,7 @@ contains
     write(stdout,*) ' '
     write(stdout,'(1x,a78)') '*---------------------------------- MAIN ------------------------------------*'
     write(stdout,'(1x,a46,10x,I8,13x,a1)') '|  Number of Wannier Functions               :',num_wann,'|'
+    write(stdout,'(1x,a46,10x,I8,13x,a1)') '|  Number of Objective Wannier Functions     :',jprime,'|'
     write(stdout,'(1x,a46,10x,I8,13x,a1)') '|  Number of input Bloch states              :',num_bands,'|'
     write(stdout,'(1x,a46,10x,I8,13x,a1)') '|  Output verbosity (1=low, 5=high)          :',iprint,'|'
     write(stdout,'(1x,a46,10x,I8,13x,a1)') '|  Timing Level (1=low, 5=high)              :',timing_level,'|'

@@ -1789,7 +1789,7 @@ contains
     !   Calculate the Gradient of the Wannier Function spread          !
     !                                                                  !
     !===================================================================  
-    use w90_parameters, only : num_wann,wb,bk,nntot,m_matrix,num_kpts,timing_level,lamdbac,jprime,r0
+    use w90_parameters, only : num_wann,wb,bk,nntot,m_matrix,num_kpts,timing_level,lambdac,jprime,r0
     use w90_io,         only : io_stopwatch,io_error
     use w90_parameters, only : lsitesymmetry !RS:
     use w90_sitesym,    only : sitesym_symmetrize_gradient !RS:
@@ -1829,9 +1829,9 @@ contains
              ! Note that this ln_tmp is defined differently wrt the one in wann_omega
              ln_tmp_loc(n,nn,nkp_loc)=wb(nn)*( aimag(log(csheet(n,nn,nkp) &
                      * m_matrix_loc(n,n,nn,nkp_loc))) - sheet(n,nn,nkp) )
-          end do
-      end do
-    end do
+          enddo
+      enddo
+    enddo
 
 
 
@@ -1876,7 +1876,7 @@ contains
              crt(:,n) = m_matrix_loc(:,n,nn,nkp_loc) / mnn
              cr(:,n)  = m_matrix_loc(:,n,nn,nkp_loc) * conjg(mnn)
           enddo
-          do jprime +1, num_wann
+          do n=jprime +1, num_wann
              crt(:,n) = 0
              cr(:,n) = 0
           enddo
@@ -1892,16 +1892,15 @@ contains
                       ( crt(m,n) * ln_tmp_loc(n,nn,nkp_loc)  &
                      + conjg( crt(n,m) * ln_tmp_loc(m,nn,nkp_loc) ) ) &
                      * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + (lambdac - 1) &
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + wb(nn) * (lambdac - 1) &
                      * ( crt(m,n) * rnkb_loc(n,nn,nkp_loc) + conjg(crt(n,m) &
                      * rnkb_loc(m,nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
                 ! -lambdac S[T_c^{k,b}]
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdac &
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdac * wb(nn) &
                      * ( crt(m,n) * r0kb(nn,nkp_loc) + conjg(crt(n,m) &
                      * r0kb(nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
              enddo
           enddo
-          cdodq_loc(:,:,nkp_loc) = cdodq_loc(:,:,nkp_loc) * wb(nn)
        enddo
     enddo
     cdodq_loc = cdodq_loc / real(num_kpts,dp) * 4.0_dp
