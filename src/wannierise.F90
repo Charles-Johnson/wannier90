@@ -1873,7 +1873,7 @@ contains
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn = 1, nntot
-          do n=1,jprime ! R^{k,b} and R~^{k,b} have columns of zeroes for the non-objective Wannier functions 
+          do n=1,num_wann
              mnn = m_matrix_loc(n,n,nn,nkp_loc)
              crt(:,n) = m_matrix_loc(:,n,nn,nkp_loc) / mnn
              cr(:,n)  = m_matrix_loc(:,n,nn,nkp_loc) * conjg(mnn)
@@ -1889,15 +1889,33 @@ contains
                 !S[T] = (T+Tdag)/2i ; T_mn = Rt_mn q_n; Tc_mn = Rt_mn qc_n
                 !q_n^{k,b} = Im ln M_nn^{k,b} + b.r_n; qc_n^{k,b} = Im ln M_nn^{k,b} + b.r0
                 cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - & 
+		      (1.0_dp - lambdac) * &
                       ( crt(m,n) * ln_tmp_loc(n,nn,nkp_loc)  &
                      + conjg( crt(n,m) * ln_tmp_loc(m,nn,nkp_loc) ) ) &
                      * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + wb(nn) * (lambdac - 1) &
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - wb(nn) &
+                     * (1.0_dp - lambdac) &
                      * ( crt(m,n) * rnkb_loc(n,nn,nkp_loc) + conjg(crt(n,m) &
                      * rnkb_loc(m,nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdac * wb(nn) &
-                     * ( crt(m,n) * r0kb(nn,nkp_loc) + conjg(crt(n,m) &
-                     * r0kb(nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
+                if (m<=jprime) then
+		     if (n<=jprime) then
+		          cdodq_loc(m,n,nkp) = cdodq_loc(m,n,nkp) - lambdac  &
+                          * cmplx(0.0_dp,-0.5_dp,kind=dp) * (crt(m,n) * ln_tmp_loc(n,nn,nkp) &
+                          + conjg(crt(n,m) * ln_tmp_loc(m,nn,nkp)) + wb(nn) * r0kb(nn,nkp) &
+                          * (crt(m,n)) + conjg(crt(n,m)))
+                     else
+                          cdodq_loc(m,n,nkp) = cdodq_loc(m,n,nkp) - conjg(cr(n,m))*0.5_dp*wb(nn) - &
+                           (1.0_dp - lambdac)*cmplx(0.0_dp,-0.5_dp,kind=dp)*conjg(crt(n,m) &
+                          * (ln_tmp_loc(m,nn,nkp)+rnkb_loc(m,nn,nkp)*wb(nn)))-lambdac*cmplx(0.0_dp,-0.5_dp,kind=dp) &
+                          * conjg(crt(n,m)*(ln_tmp_loc(m,nn,nkp)+wb(nn)*r0kb(nn,nkp)))
+                     end if
+		else if (n<=jprime) then
+		     cdodq_loc(m,n,nkp)=cdodq_loc(m,n,nkp) + wb(nn)*cr(m,n)*0.5_dp-(1.0_dp-lambdac)*crt(m,n) &
+                     *cmplx(0.0_dp,-0.5_dp,kind=dp)*(ln_tmp_loc(n,nn,nkp)+wb(nn)*rnkb_loc(n,nn,nkp))-lambdac &
+                     *cmplx(0.0_dp,-0.5_dp,kind=dp)*crt(m,n)*(ln_tmp_loc(n,nn,nkp)+wb(nn)*r0kb(nn,nkp))
+		else
+		     cdodq_loc(m,n,nkp)=cdodq_loc(m,n,nkp)
+                end if
              enddo
           enddo
        enddo
