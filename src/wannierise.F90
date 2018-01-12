@@ -1868,13 +1868,12 @@ contains
 
     ! cd0dq(m,n,nkp) is calculated
     cdodq_loc=cmplx_0
-    ! R^{k,b} and R~^{k,b} have columns of zeroes for the non-objective Wannier functions 
     cr = cmplx_0
     crt = cmplx_0
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn = 1, nntot
-          do n=1,jprime
+          do n=1,jprime ! R^{k,b} and R~^{k,b} have columns of zeroes for the non-objective Wannier functions 
              mnn = m_matrix_loc(n,n,nn,nkp_loc)
              crt(:,n) = m_matrix_loc(:,n,nn,nkp_loc) / mnn
              cr(:,n)  = m_matrix_loc(:,n,nn,nkp_loc) * conjg(mnn)
@@ -1888,6 +1887,7 @@ contains
                      *( cr(m,n) - conjg(cr(n,m)) )
                 ! +(lambdac-1)S[T^{k,b}]-lambdac S[Tc^{k,b}]
                 !S[T] = (T+Tdag)/2i ; T_mn = Rt_mn q_n; Tc_mn = Rt_mn qc_n
+                !q_n^{k,b} = Im ln M_nn^{k,b} + b.r_n; qc_n^{k,b} = Im ln M_nn^{k,b} + b.r0
                 cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - & 
                       ( crt(m,n) * ln_tmp_loc(n,nn,nkp_loc)  &
                      + conjg( crt(n,m) * ln_tmp_loc(m,nn,nkp_loc) ) ) &
