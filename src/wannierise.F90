@@ -1892,7 +1892,7 @@ contains
                       ( crt(m,n) * ln_tmp_loc(n,nn,nkp_loc)  &
                      + conjg( crt(n,m) * ln_tmp_loc(m,nn,nkp_loc) ) ) &
                      * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + wb(nn) * (lambdac - 1) &
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + wb(nn) * (lambdac - 1.0_dp) &
                      * ( crt(m,n) * rnkb_loc(n,nn,nkp_loc) + conjg(crt(n,m) &
                      * rnkb_loc(m,nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
                 cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdac * wb(nn) &
