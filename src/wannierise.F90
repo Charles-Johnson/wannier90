@@ -64,6 +64,8 @@ module w90_wannierise
      !! Off-diagonal
      real(kind=dp) :: om_tot 
      !! Total
+     real(kind=dp) :: om_nu
+     !! Lagrange multiplier term due to constrained centres
 !~     real(kind=dp) :: om_1   
 !~     real(kind=dp) :: om_2   
 !~     real(kind=dp) :: om_3   
@@ -1748,6 +1750,10 @@ contains
                      * conjg(m_matrix_loc(n,m,nn,nkp_loc)), kind=dp )
              enddo
           enddo
+          do m = 1, jprime
+             wann_spread%om_od = wann_spread%om_od + lambdac * wb(nn) * &
+                ln_tmp_loc(m,nn,nkp_loc) ** 2
+          enddo
           do m = jprime + 1, num_wann
              wann_spread%om_od = wann_spread%om_od &
                 - wb(nn) * (1.0_dp - real( m_matrix_loc(m,m,nn,nkp_loc) &
@@ -1775,9 +1781,28 @@ contains
 
     call comms_allreduce(wann_spread%om_d,1,'SUM')
 
-    wann_spread%om_d = wann_spread%om_d / real(num_kpts,dp)  
+    wann_spread%om_d = (1.0_dp - lambdac) * wann_spread%om_d / real(num_kpts,dp)
 
-    wann_spread%om_tot = wann_spread%om_i + wann_spread%om_d + wann_spread%om_od
+    wann_spread%om_nu = 0.0_dp
+    do nkp_loc = 1, counts(my_node_id)
+       nkp = nkp_loc + displs(my_node_id)
+       do nn = 1, nntot
+          do n=1, jprime
+             wann_spread%om_nu = wann_spread%om_nu + wb(nn) * ln_tmp_loc(n,nn,nkp_loc) &
+                * sum(bk(:,nn,nkp)*r0(:))
+          enddo
+       enddo
+    enddo
+    
+    call comms_allreduce(wann_spread%om_nu,1,'SUM')
+    
+    wann_spread%om_nu = 2*wann_spread%om_nu / real(num_kpts,dp)
+
+    wann_spread%om_nu = wann_spread%om_nu + jprime*sum(r0(:)**2)
+    
+    wann_spread%om_nu = lambdac * wann_spread%om_nu   
+
+    wann_spread%om_tot = wann_spread%om_i + wann_spread%om_d + wann_spread%om_od + wann_spread%om_nu
 
     if (timing_level>1.and.on_root) call io_stopwatch('wann: omega',2)
 
