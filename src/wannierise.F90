@@ -1581,7 +1581,7 @@ contains
     !                                                                  !
     !===================================================================  
     use w90_parameters, only : num_wann,m_matrix,nntot,wb,bk,num_kpts,&
-                           omega_invariant,timing_level
+                           omega_invariant,timing_level, lambdac,jprime,r0
     use w90_io,         only : io_stopwatch
 
     implicit none
@@ -1748,6 +1748,11 @@ contains
                      * conjg(m_matrix_loc(n,m,nn,nkp_loc)), kind=dp )
              enddo
           enddo
+          do m = jprime + 1, num_wann
+             wann_spread%om_od = wann_spread%om_od &
+                - wb(nn) * (1.0_dp - real( m_matrix_loc(m,m,nn,nkp_loc) &
+                * conjg(m_matrix_loc(m,m,nn,nkp_loc)), kind=dp ))
+          enddo
        enddo
     enddo
 
@@ -1760,7 +1765,7 @@ contains
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn = 1, nntot  
-          do n = 1, num_wann  
+          do n = 1, jprime  
              brn = sum(bk(:,nn,nkp)*rave(:,n))
              wann_spread%om_d = wann_spread%om_d + wb(nn) &
                   * ( ln_tmp_loc(n,nn,nkp_loc) + brn)**2
