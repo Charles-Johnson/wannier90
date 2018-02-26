@@ -2305,8 +2305,8 @@ contains
     write(stdout,'(1x,a)') '+----------------------------------------------------------------------------+'
     do i=1,num_wann
        write(stdout,'(1x,a1,1x,a2,1x,i3,4x, 3F10.5,3x,a1,1x,F10.5,4x,a17)') &
-&                 '|','  ',i,r0,&
-&                 '|',lambdac,'                |'
+&                 '|','  ',i,centre_constraints(i,1:3),&
+&                 '|',centre_constraints(i,4),'                |'
     end do
     write(stdout,'(1x,a)') '*----------------------------------------------------------------------------*'
     ! Projections
@@ -4497,7 +4497,6 @@ contains
 
      do loop1=1, num_lines
        dummy = in_data(loop1)
-       if (constraint_num > num_constraints) exit
        if (constraint_num > 0) then
          row = 0
          start = 1
@@ -4522,16 +4521,25 @@ contains
              end if
            end if 
          end do
+         in_data(loop1)(1:maxlen) = ' '
          if (row > 0 .and. row < 5) then
            centre_constraints(wann, 4) = 1.0_dp
          end if
          constraint_num = constraint_num + 1
        end if
-       index1 = index(dummy, 'begin')
-       if (index1 == 0) cycle
-       index2 = index(dummy, 'centre_constraints')
-       if (index2 == 0) cycle
-       constraint_num = 1
+       index1 = index(dummy, 'centre_constraints')
+       if (index1 > 0) then
+          index1 = index(dummy, 'begin')
+          if (index1 > 0) then
+            constraint_num = 1
+            in_data(loop1)(1:maxlen) = ' '
+          end if
+          index1 = index(dummy, 'end')
+          if (index1 > 0) then
+            in_data(loop1)(1:maxlen) = ' '
+            exit
+          end if
+       end if
      end do
      end if
    end subroutine param_get_centre_constraints  
