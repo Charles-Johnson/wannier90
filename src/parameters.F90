@@ -52,6 +52,8 @@ module w90_parameters
   !! Lagrange multiplier for constraining centres
   real(kind=dp), dimension(1:3), public,save :: r0
   !! Constrained centres
+  real(kind=dp), allocatable, public, save :: centre_constraints(:,:)
+  !! Centre constraints for each Wannier function. First three values are co-ordinates of centre constraint (defaults to centre of trial orbital). Last value is the corresponding lagrange multiplier (defaults to unity).
   character(len=50), public, save :: devel_flag
   ! Adaptive vs. fixed smearing stuff [GP, Jul 12, 2012]
   ! Only internal, always use the local variables defined by each module
@@ -1943,7 +1945,7 @@ contains
     if (found) call param_get_projections
     if (guiding_centres .and. .not. found .and. .not.(gamma_only.and.use_bloch_phases)) & 
        call io_error('param_read: Guiding centres requested, but no projection block found')
-
+    call param_get_centre_constraints
     ! check to see that there are no unrecognised keywords
 
 302  continue
@@ -2298,12 +2300,15 @@ contains
        write(stdout,'(25x,a)') 'No atom positions specified'
     end if
     write(stdout,*) ' '
-       write(stdout,'(32x,a)') '-------------------'
-       write(stdout,'(32x,a)') 'CONSTRAINED CENTRES'
-       write(stdout,'(32x,a)') '-------------------'
-       write(stdout,'(3x,a,F10.5,1x,a1,F10.5,1x,a1,F10.5,6x,a,F10.5)') 'Constrained Centre =',r0(1),',',r0(2),',',r0(3),&
-         'Lagrange Multiplier = ',lambdac
-       
+    write(stdout,'(1x,a)') '*----------------------------------------------------------------------------*'
+    write(stdout,'(1x,a)') '|   Wannier#       Constrained Centre             Lagrange Multiplier        |'
+    write(stdout,'(1x,a)') '+----------------------------------------------------------------------------+'
+    do i=1,num_wann
+       write(stdout,'(1x,a1,1x,a2,1x,i3,4x, 3F10.5,3x,a1,1x,F10.5,4x,a17)') &
+&                 '|','  ',i,r0,&
+&                 '|',lambdac,'                |'
+    end do
+    write(stdout,'(1x,a)') '*----------------------------------------------------------------------------*'
     ! Projections
     if(iprint>1 .and. allocated(proj_site) ) then
        write(stdout,'(32x,a)') '-----------'
@@ -4466,6 +4471,71 @@ contains
 
 
    end  subroutine param_get_range_vector
+
+   subroutine param_get_centre_constraints
+     use w90_io,        only : io_error
+     integer           :: num_constraints, loop1, index1, constraint_num, index2, loop2
+     integer           :: row, start, finish, wann, ierr
+     logical           :: found
+     character(len=maxlen) :: dummy     
+
+     call param_get_block_length('centre_constraints', found, num_constraints)
+     
+     allocate( centre_constraints(num_wann,4),stat=ierr)
+     if (ierr/=0) call io_error('Error allocating centre_constraints in param_get_centre_constraints')
+     
+     do loop1=1, num_wann
+       do loop2=1,3
+         centre_constraints(loop1, loop2) = proj_site(loop2, loop1)
+       end do 
+     end do
+     centre_constraints(:,4) = 0.0_dp
+
+     if (found) then
+
+     constraint_num = 0
+
+     do loop1=1, num_lines
+       dummy = in_data(loop1)
+       if (constraint_num > num_constraints) exit
+       if (constraint_num > 0) then
+         row = 0
+         start = 1
+         finish = 1
+         do loop2=1, len(dummy)
+           if (dummy(loop2:loop2) == ' ') then
+             start = loop2 + 1
+           end if
+           if (start < loop2) then
+             if (dummy(loop2:loop2) == ' ') then
+               finish = loop2 - 1
+               if (row == 0) then
+                 read(dummy(start:finish), *) wann
+               end if
+               if (row > 0) then
+                 if (row > 4) then
+                   call io_error("Didn't expect anything else after Lagrange multiplier")
+                 end if
+                 read(dummy(start:finish), *) centre_constraints(wann, row)
+               end if
+               row = row + 1 
+             end if
+           end if 
+         end do
+         if (row > 0 .and. row < 5) then
+           centre_constraints(wann, 4) = 1.0_dp
+         end if
+         constraint_num = constraint_num + 1
+       end if
+       index1 = index(dummy, 'begin')
+       if (index1 == 0) cycle
+       index2 = index(dummy, 'centre_constraints')
+       if (index2 == 0) cycle
+       constraint_num = 1
+     end do
+     end if
+   end subroutine param_get_centre_constraints  
+      
 
   !===================================!
    subroutine param_get_projections
