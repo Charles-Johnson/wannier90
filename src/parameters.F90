@@ -4474,12 +4474,13 @@ contains
 
    subroutine param_get_centre_constraints
      use w90_io,        only : io_error
-     integer           :: num_constraints, loop1, index1, constraint_num, index2, loop2
-     integer           :: row, start, finish, wann, ierr
-     logical           :: found
+     !integer           :: num_constraints
+     integer           :: loop1, index1, constraint_num, index2, loop2
+     integer           :: column, start, finish, wann, ierr
+     !logical           :: found
      character(len=maxlen) :: dummy     
 
-     call param_get_block_length('centre_constraints', found, num_constraints)
+     !call param_get_block_length('centre_constraints', found, num_constraints)
      
      allocate( centre_constraints(num_wann,4),stat=ierr)
      if (ierr/=0) call io_error('Error allocating centre_constraints in param_get_centre_constraints')
@@ -4491,38 +4492,47 @@ contains
      end do
      centre_constraints(:,4) = 0.0_dp
 
-     if (found) then
+     !if (found .eqv. .false.) write(stdout, *) 'centre constraints not found in input file'
+     !if (found .eqv. .true.) write(stdout, *) 'centre constraints found in input file'
 
      constraint_num = 0
-
      do loop1=1, num_lines
        dummy = in_data(loop1)
        if (constraint_num > 0) then
-         row = 0
+         if (trim(dummy) == '') cycle
+         index1 = index(dummy, 'begin')
+         if (index1 > 0) call io_error("centre_constraints block hasn't ended yet")
+         index1 = index(dummy, 'end')
+         if (index1 > 0) then
+           index1 = index(dummy, 'centre_constraints')
+           if (index1 == 0) call io_error('Wrong ending of block (need to end centre_constraints)')
+           in_data(loop1)(1:maxlen) = ' '
+           exit    
+         end if
+         column = 0
          start = 1
          finish = 1
-         do loop2=1, len(dummy)
-           if (dummy(loop2:loop2) == ' ') then
+         do loop2=1, len_trim(dummy)
+           if (start == loop2 .and. dummy(loop2:loop2) == ' ') then
              start = loop2 + 1
            end if
            if (start < loop2) then
              if (dummy(loop2:loop2) == ' ') then
                finish = loop2 - 1
-               if (row == 0) then
-                 read(dummy(start:finish), *) wann
-               end if
-               if (row > 0) then
-                 if (row > 4) then
-                   call io_error("Didn't expect anything else after Lagrange multiplier")
-                 end if
-                 read(dummy(start:finish), *) centre_constraints(wann, row)
-               end if
-               row = row + 1 
+               call param_get_centre_constraint_from_column(column, start, finish, wann, dummy)
+               start = loop2 + 1
+               finish = start
              end if
-           end if 
+           end if
+           if (loop2 == len_trim(dummy) .and. dummy(loop2:loop2) /= ' ') then
+             finish = loop2
+             call param_get_centre_constraint_from_column(column, start, finish, wann, dummy)
+             start = loop2 + 1
+             finish = start 
+           end if
          end do
          in_data(loop1)(1:maxlen) = ' '
-         if (row > 0 .and. row < 5) then
+         if (column > 0 .and. column < 5) then
            centre_constraints(wann, 4) = 1.0_dp
          end if
          constraint_num = constraint_num + 1
@@ -4534,16 +4544,26 @@ contains
             constraint_num = 1
             in_data(loop1)(1:maxlen) = ' '
           end if
-          index1 = index(dummy, 'end')
-          if (index1 > 0) then
-            in_data(loop1)(1:maxlen) = ' '
-            exit
-          end if
        end if
      end do
-     end if
-   end subroutine param_get_centre_constraints  
-      
+   end subroutine param_get_centre_constraints
+
+   subroutine param_get_centre_constraint_from_column(column, start, finish, wann, dummy)
+      use w90_io,        only : io_error   
+      integer, intent(inout):: column, start, finish, wann
+      character(len=maxlen), intent(inout):: dummy  
+      if (column == 0) then
+        read(dummy(start:finish), '(i3)') wann
+      end if
+      if (column > 0) then
+        if (column > 4) then
+          call io_error("Didn't expect anything else after Lagrange multiplier")
+        end if
+        read(dummy(start:finish), '(f10.10)') centre_constraints(wann, column)
+      end if
+      column = column + 1 
+   end subroutine param_get_centre_constraint_from_column
+
 
   !===================================!
    subroutine param_get_projections
