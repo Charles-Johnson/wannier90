@@ -52,8 +52,10 @@ module w90_parameters
   !! Lagrange multiplier for constraining centres
   real(kind=dp), dimension(1:3), public,save :: r0
   !! Constrained centres
-  real(kind=dp), allocatable, public, save :: centre_constraints(:,:)
-  !! Centre constraints for each Wannier function. First three values are co-ordinates of centre constraint (defaults to centre of trial orbital). Last value is the corresponding lagrange multiplier (defaults to unity).
+  real(kind=dp), allocatable, public, save :: ccentres_frac(:,:)
+  real(kind=dp), allocatable, public, save :: ccentres_cart(:,:)
+  real(kind=dp), allocatable, public, save :: lambda(:)
+  !! Centre constraints for each Wannier function. Co-ordinates of centre constraint defaults to centre of trial orbital. Lagrange multiplier defaults to zero.
   character(len=50), public, save :: devel_flag
   ! Adaptive vs. fixed smearing stuff [GP, Jul 12, 2012]
   ! Only internal, always use the local variables defined by each module
@@ -2305,8 +2307,8 @@ contains
     write(stdout,'(1x,a)') '+----------------------------------------------------------------------------+'
     do i=1,num_wann
        write(stdout,'(1x,a1,1x,a2,1x,i3,4x, 3F10.5,3x,a1,1x,F10.5,4x,a17)') &
-&                 '|','  ',i,centre_constraints(i,1:3),&
-&                 '|',centre_constraints(i,4),'                |'
+&                 '|','  ',i,ccentres_frac(i,:),&
+&                 '|',lambda(i),'                |'
     end do
     write(stdout,'(1x,a)') '*----------------------------------------------------------------------------*'
     ! Projections
@@ -3176,7 +3178,18 @@ contains
        deallocate( dis_spheres, stat=ierr  )
        if (ierr/=0) call io_error('Error in deallocating dis_spheres in param_dealloc')
     endif
-
+    if( allocated( ccentres_frac ) ) then
+    deallocate( ccentres_frac,stat=ierr)
+     if (ierr/=0) call io_error('Error deallocating ccentres_frac in param_dealloc')
+    endif
+    if( allocated( ccentres_cart ) ) then
+     deallocate( ccentres_cart,stat=ierr)
+     if (ierr/=0) call io_error('Error deallocating ccentres_cart in param_dealloc')
+    end if
+    if( allocated( lambda ) ) then
+     deallocate( lambda,stat=ierr)
+     if (ierr/=0) call io_error('Error deallocating lambda in param_dealloc')
+    end if
     return
 
   end subroutine param_dealloc
@@ -4474,23 +4487,26 @@ contains
 
    subroutine param_get_centre_constraints
      use w90_io,        only : io_error
+     use w90_utility,   only : utility_frac_to_cart
      !integer           :: num_constraints
      integer           :: loop1, index1, constraint_num, index2, loop2
      integer           :: column, start, finish, wann, ierr
      !logical           :: found
      character(len=maxlen) :: dummy     
+     
+     allocate( ccentres_frac(num_wann,3),stat=ierr)
+     if (ierr/=0) call io_error('Error allocating ccentres_frac in param_get_centre_constraints')
+     allocate( ccentres_cart(num_wann,3),stat=ierr)
+     if (ierr/=0) call io_error('Error allocating ccentres_cart in param_get_centre_constraints')
+     allocate( lambda(num_wann),stat=ierr)
+     if (ierr/=0) call io_error('Error allocating lambda in param_get_centre_constraints')
 
-     !call param_get_block_length('centre_constraints', found, num_constraints)
-     
-     allocate( centre_constraints(num_wann,4),stat=ierr)
-     if (ierr/=0) call io_error('Error allocating centre_constraints in param_get_centre_constraints')
-     
      do loop1=1, num_wann
        do loop2=1,3
-         centre_constraints(loop1, loop2) = proj_site(loop2, loop1)
+         ccentres_frac(loop1, loop2) = proj_site(loop2, loop1)
        end do 
      end do
-     centre_constraints(:,4) = 0.0_dp
+     lambda(:) = 0.0_dp
 
      !if (found .eqv. .false.) write(stdout, *) 'centre constraints not found in input file'
      !if (found .eqv. .true.) write(stdout, *) 'centre constraints found in input file'
@@ -4533,7 +4549,7 @@ contains
          end do
          in_data(loop1)(1:maxlen) = ' '
          if (column > 0 .and. column < 5) then
-           centre_constraints(wann, 4) = 1.0_dp
+           lambda(wann) = 1.0_dp
          end if
          constraint_num = constraint_num + 1
        end if
@@ -4545,6 +4561,9 @@ contains
             in_data(loop1)(1:maxlen) = ' '
           end if
        end if
+     end do
+     do loop1=1, num_wann
+       call utility_frac_to_cart(ccentres_frac(loop1,:), ccentres_cart(loop1,:), real_lattice)
      end do
    end subroutine param_get_centre_constraints
 
@@ -4559,7 +4578,7 @@ contains
         if (column > 4) then
           call io_error("Didn't expect anything else after Lagrange multiplier")
         end if
-        read(dummy(start:finish), '(f10.10)') centre_constraints(wann, column)
+        read(dummy(start:finish), '(f10.10)') ccentres_frac(wann, column)
       end if
       column = column + 1 
    end subroutine param_get_centre_constraint_from_column
