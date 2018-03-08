@@ -4506,7 +4506,7 @@ contains
          ccentres_frac(loop1, loop2) = proj_site(loop2, loop1)
        end do 
      end do
-     lambda(:) = 0.0_dp
+     lambda(:) = lambdac
 
      !if (found .eqv. .false.) write(stdout, *) 'centre constraints not found in input file'
      !if (found .eqv. .true.) write(stdout, *) 'centre constraints found in input file'
@@ -4575,10 +4575,9 @@ contains
         read(dummy(start:finish), '(i3)') wann
       end if
       if (column > 0) then
-        if (column > 4) then
-          call io_error("Didn't expect anything else after Lagrange multiplier")
-        end if
-        read(dummy(start:finish), '(f10.10)') ccentres_frac(wann, column)
+        if (column > 4) call io_error("Didn't expect anything else after Lagrange multiplier")
+        if (column < 4) read(dummy(start:finish), '(f10.10)') ccentres_frac(wann, column)
+        if (column == 4) read(dummy(start:finish), '(f10.10)') lambda(wann)
       end if
       column = column + 1 
    end subroutine param_get_centre_constraint_from_column
