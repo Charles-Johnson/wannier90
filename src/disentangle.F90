@@ -17,6 +17,7 @@ module w90_disentangle
   !! subspace from a set of entangled bands.
 
   use w90_constants, only: dp,cmplx_0,cmplx_1
+  use w90_wannierise
   use w90_io, only: io_error,stdout,io_stopwatch
   use w90_parameters, only : num_bands,num_wann,a_matrix,u_matrix_opt,&
        u_matrix,m_matrix_orig,lwindow,dis_conv_window,devel_flag, &
@@ -25,7 +26,7 @@ module w90_disentangle
        dis_win_max,dis_froz_min,dis_froz_max,dis_spheres_num, &
        dis_spheres_first_wann,num_kpts,nnlist,ndimwin,wb,gamma_only, &
        eigval,length_unit,dis_spheres,m_matrix,dis_conv_tol,frozen_states, &
-       optimisation,recip_lattice,kpt_latt
+       optimisation,recip_lattice,kpt_latt, lambdas, ccentres_cart, bk
 
   use w90_comms, only : on_root, my_node_id, num_nodes,&
                         comms_bcast, comms_array_split,&
@@ -43,7 +44,11 @@ module w90_disentangle
   !! At input it contains a large set of eigenvalues. At
   !! it is slimmed down to contain only those inside the energy window.
 
-
+  ! guiding centres
+    real(kind=dp), allocatable :: rguide (:,:)  
+    integer :: irguide
+  complex(kind=dp), allocatable :: csheet(:,:,:)
+  real(kind=dp),    allocatable :: sheet (:,:,:)
   logical                :: linner                               
   !! Is there a frozen window
   logical, allocatable   :: lfrozen(:,:) 
@@ -57,7 +62,7 @@ module w90_disentangle
   integer, allocatable   :: indxnfroz(:,:)
   !!   outer-window band index for the i-th non-frozen state
    !! (equals 1 if it is the bottom of outer window)
-
+  complex(kind=dp), allocatable :: proj_centres(:,:)
   public :: dis_main
 
 contains
@@ -81,7 +86,8 @@ contains
 
     if (on_root) write(stdout,'(/1x,a)') &
          '*------------------------------- DISENTANGLE --------------------------------*'
-
+    allocate(proj_centres(num_wann,3),stat=ierr)
+    if (ierr/=0) call io_error('Error in allocating proj_centres in dis_main')
     ! Allocate arrays
     allocate(eigval_opt(num_bands,num_kpts),stat=ierr)
     if (ierr/=0) call io_error('Error in allocating eigval_opt in dis_main')
@@ -221,6 +227,8 @@ contains
     if (ierr/=0) call io_error('Error in deallocating cww in dis_main')
     deallocate(cwb,stat=ierr)
     if (ierr/=0) call io_error('Error in deallocating cwb in dis_main')
+    deallocate(proj_centres, stat=ierr)
+    if (ierr/=0) call io_error('Error in deallocating proj_centres in dis_main')
 
     !zero the unused elements of u_matrix_opt (just in case...)
     do nkp = 1, num_kpts
@@ -1681,8 +1689,27 @@ contains
       ! ------------------
       ! BIG ITERATION LOOP
       ! ------------------
+      irguide = 0
       do iter = 1, dis_num_iter
-
+         call wann_phases(csheet, sheet, rguide, irguide)
+         irguide = 1
+         proj_centres = cmplx_0
+         do nkp = 1, num_kpts
+            do nn=1, nntot
+               nkp2=nnlist(nkp,nn)
+               call zgemm('N','N',num_bands,num_wann,ndimwin(nkp2),cmplx_1,&
+                m_matrix_orig(:,:,nn,nkp),num_bands,u_matrix_opt(:,:,nkp2),num_bands,&
+                cmplx_0,cbw,num_bands)
+               do i=1, num_wann
+                  do j=1,3
+                     proj_centres(i,j) = proj_centres(i,j) + wb(nn)*bk(j,nn,nkp) &
+                                         * (aimag(log(csheet(i,nn,nkp) &
+                                         * sum(conjg(u_matrix_opt(i,:,nkp))*cbw(:,i))) - sheet(i,nn,nkp)))
+                  enddo
+               enddo
+            enddo
+         enddo
+         proj_centres = - proj_centres / real(num_kpts,dp) 
          if (timing_level>1 .and. on_root) call io_stopwatch('dis: extract_1',1)
 
          if (iter.eq.1) then  
@@ -2279,6 +2306,7 @@ contains
 
         if (timing_level>1 .and. on_root) call io_stopwatch('dis: extract: zmatrix',1)
 
+
         cmtrx=cmplx_0
         ndimk=ndimwin(nkp)-ndimfroz(nkp)
         do nn=1,nntot
@@ -2293,6 +2321,9 @@ contains
                  csum=cmplx_0
                  do l=1,num_wann
                     csum = csum + cbw(p,l) * conjg(cbw(q,l))
+                    csum = csum + lambdas(l) * sum((proj_centres(l,:) - ccentres_cart(l,:))*bk(:,nn,nkp)) * &
+                           aimag(cbw(p,l)*conjg(u_matrix_opt(q,l,nkp))/sum(conjg(u_matrix_opt(:,l,nkp))*cbw(:,l)) &
+                           - u_matrix_opt(p,l,nkp)*conjg(cbw(q,l))/sum(u_matrix_opt(:,l,nkp)*conjg(cbw(:,l)))) 
                  enddo
                  cmtrx(m,n) = cmtrx(m,n) + cmplx(wb(nn),0.0_dp,kind=dp) * csum
                  cmtrx(n,m) = conjg(cmtrx(m,n))
@@ -2551,7 +2582,6 @@ contains
       ! BIG ITERATION LOOP
       ! ------------------
       do iter = 1, dis_num_iter
-
          if (iter.eq.1) then  
             ! Initialize Z matrix at k points w/ non-frozen states
             do nkp = 1, num_kpts  

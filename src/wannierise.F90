@@ -24,12 +24,14 @@ module w90_wannierise
 
   private
 
+  public :: wann_phases
   public :: wann_main
   public :: wann_main_gamma  ![ysl]
 
   ! Data to avoid large allocation within iteration loop
   real(kind=dp),    allocatable  :: rnkb (:,:,:)   
-  real(kind=dp),    allocatable  :: rnkb_loc (:,:,:)   
+  real(kind=dp),    allocatable  :: rnkb_loc (:,:,:)
+  real(kind=dp),    allocatable  :: rcnkb(:,:,:)   
   real(kind=dp),    allocatable  :: ln_tmp(:,:,:)
 
   real(kind=dp),    allocatable  :: ln_tmp_loc(:,:,:)
@@ -92,7 +94,7 @@ contains
          fixed_step,lfixstep,write_proj,have_disentangled,conv_tol,num_proj, &
          conv_window,conv_noise_amp,conv_noise_num,wannier_centres,write_xyz, &
          wannier_spreads,omega_total,omega_tilde,optimisation,write_vdw_data,&
-         write_hr_diag,kpt_latt
+         write_hr_diag,kpt_latt, bk, ccentres_cart
     use w90_utility,    only : utility_frac_to_cart,utility_zgemm
     use w90_parameters, only : lsitesymmetry                !RS:
     use w90_sitesym,    only : sitesym_symmetrize_gradient  !RS:
@@ -170,10 +172,13 @@ contains
 !    if (ierr/=0) call io_error('Error in allocating u0 in wann_main')
     allocate( rnkb (num_wann, nntot, num_kpts),stat=ierr    )     
     if (ierr/=0) call io_error('Error in allocating rnkb in wann_main')
+    allocate( rcnkb (num_wann, nntot, num_kpts),stat=ierr    )     
+    if (ierr/=0) call io_error('Error in allocating rcnkb in wann_main')
     allocate( ln_tmp (num_wann, nntot, num_kpts), stat=ierr    )
     if (ierr/=0) call io_error('Error in allocating ln_tmp in wann_main')
 
     rnkb=0.0_dp
+    rcnkb = 0.0_dp
 
     ! sub vars passed into other subs 
     allocate( csheet (num_wann, nntot, num_kpts), stat=ierr )
@@ -314,6 +319,16 @@ contains
        call wann_phases(csheet,sheet,rguide,irguide)
        irguide=1
     endif
+    
+    ! constrained centres part
+    
+    do nkp = 1, num_kpts
+       do nn=1,nntot
+          do n=1,num_wann
+             rcnkb(n, nn,nkp) = sum(bk(:,nn,nkp)*ccentres_cart(n,:))
+          end do
+       end do
+    end do
 
     ! calculate initial centers and spread
     call wann_omega(csheet,sheet,rave,r2ave,rave2,wann_spread)
@@ -673,6 +688,8 @@ contains
     if (ierr/=0) call io_error('Error in deallocating ln_tmp in wann_main')
     deallocate( rnkb,stat=ierr  )
     if (ierr/=0) call io_error('Error in deallocating rnkb in wann_main')
+    deallocate( rcnkb,stat=ierr    )     
+    if (ierr/=0) call io_error('Error in deallocating rcnkb in wann_main')
 
     deallocate(u0_loc, stat=ierr)
     if (ierr/=0) call io_error('Error in deallocating u0_loc in wann_main')
@@ -1583,7 +1600,8 @@ contains
     !                                                                  !
     !===================================================================  
     use w90_parameters, only : num_wann,m_matrix,nntot,wb,bk,num_kpts,&
-                           omega_invariant,timing_level, lambdac,jprime,r0
+                           omega_invariant,timing_level,jprime,&
+                           ccentres_cart, lambdas
     use w90_io,         only : io_stopwatch
 
     implicit none
@@ -1751,7 +1769,7 @@ contains
              enddo
           enddo
           do m = 1, jprime
-             wann_spread%om_od = wann_spread%om_od + lambdac * wb(nn) * &
+             wann_spread%om_od = wann_spread%om_od + lambdas(m) * wb(nn) * &
                 ln_tmp_loc(m,nn,nkp_loc) ** 2
           enddo
           do m = jprime + 1, num_wann
@@ -1773,7 +1791,7 @@ contains
        do nn = 1, nntot  
           do n = 1, jprime  
              brn = sum(bk(:,nn,nkp)*rave(:,n))
-             wann_spread%om_d = wann_spread%om_d + wb(nn) &
+             wann_spread%om_d = wann_spread%om_d + (1.0_dp - lambdas(n)) * wb(nn) &
                   * ( ln_tmp_loc(n,nn,nkp_loc) + brn)**2
           enddo
        enddo
@@ -1781,15 +1799,15 @@ contains
 
     call comms_allreduce(wann_spread%om_d,1,'SUM')
 
-    wann_spread%om_d = (1.0_dp - lambdac) * wann_spread%om_d / real(num_kpts,dp)
+    wann_spread%om_d = wann_spread%om_d / real(num_kpts,dp)
 
     wann_spread%om_nu = 0.0_dp
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn = 1, nntot
           do n=1, jprime
-             wann_spread%om_nu = wann_spread%om_nu + wb(nn) * ln_tmp_loc(n,nn,nkp_loc) &
-                * sum(bk(:,nn,nkp)*r0(:))
+             wann_spread%om_nu = wann_spread%om_nu + lambdas(n)*wb(nn) * &
+                ln_tmp_loc(n,nn,nkp_loc) * sum(bk(:,nn,nkp)*ccentres_cart(n,:))
           enddo
        enddo
     enddo
@@ -1797,10 +1815,10 @@ contains
     call comms_allreduce(wann_spread%om_nu,1,'SUM')
     
     wann_spread%om_nu = 2*wann_spread%om_nu / real(num_kpts,dp)
-
-    wann_spread%om_nu = wann_spread%om_nu + jprime*sum(r0(:)**2)
     
-    wann_spread%om_nu = lambdac * wann_spread%om_nu   
+    do n=1, jprime
+      wann_spread%om_nu = wann_spread%om_nu + lambdas(n)*sum(ccentres_cart(n,:)**2)
+    end do   
 
     wann_spread%om_tot = wann_spread%om_i + wann_spread%om_d + wann_spread%om_od + wann_spread%om_nu
 
@@ -1819,7 +1837,7 @@ contains
     !   Calculate the Gradient of the Wannier Function spread          !
     !                                                                  !
     !===================================================================  
-    use w90_parameters, only : num_wann,wb,bk,nntot,m_matrix,num_kpts,timing_level,lambdac,jprime,r0
+    use w90_parameters, only : num_wann,wb,bk,nntot,m_matrix,num_kpts,timing_level,lambdas,jprime, ccentres_cart
     use w90_io,         only : io_stopwatch,io_error
     use w90_parameters, only : lsitesymmetry !RS:
     use w90_sitesym,    only : sitesym_symmetrize_gradient !RS:
@@ -1835,8 +1853,7 @@ contains
 
     !local
     complex(kind=dp), allocatable  :: cr (:,:)   
-    complex(kind=dp), allocatable  :: crt (:,:)
-    real(kind=dp), allocatable :: r0kb(:,:)  
+    complex(kind=dp), allocatable  :: crt (:,:)  
 
     ! local
     integer :: iw,ind,nkp,nn,m,n,ierr,nkp_loc
@@ -1848,8 +1865,6 @@ contains
     if (ierr/=0) call io_error('Error in allocating cr in wann_domega')
     allocate(  crt (num_wann, num_wann),stat=ierr ) 
     if (ierr/=0) call io_error('Error in allocating crt in wann_domega')
-    allocate( r0kb (nntot, num_kpts),stat=ierr )
-    if (ierr/=0) call io_error('Error in allocating r0kb in wann_domega')
 
 
     do nkp_loc = 1, counts(my_node_id)
@@ -1884,12 +1899,10 @@ contains
 
     ! R_mn=M_mn/M_nn and q_m^{k,b} = Im phi_m^{k,b} + b.r_n are calculated
     rnkb = 0.0_dp
-    r0kb = 0.0_dp
     rnkb_loc = 0.0_dp
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn=1,nntot
-          r0kb(nn,nkp) = sum(bk(:,nn,nkp)*r0(:))
           do n=1,num_wann
              rnkb_loc(n,nn,nkp_loc) = sum(bk(:,nn,nkp)*rave(:,n))
           enddo
@@ -1922,12 +1935,12 @@ contains
                       ( crt(m,n) * ln_tmp_loc(n,nn,nkp_loc)  &
                      + conjg( crt(n,m) * ln_tmp_loc(m,nn,nkp_loc) ) ) &
                      * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + wb(nn) * (lambdac - 1.0_dp) &
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) + wb(nn) * (lambdas(n) - 1.0_dp) &
                      * ( crt(m,n) * rnkb_loc(n,nn,nkp_loc) + conjg(crt(n,m) &
                      * rnkb_loc(m,nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
-                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdac * wb(nn) &
-                     * ( crt(m,n) * r0kb(nn,nkp_loc) + conjg(crt(n,m) &
-                     * r0kb(nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
+                cdodq_loc(m,n,nkp_loc) = cdodq_loc(m,n,nkp_loc) - lambdas(n) * wb(nn) &
+                     * ( crt(m,n) * rcnkb(n,nn,nkp_loc) + conjg(crt(n,m) &
+                     * rcnkb(m,nn,nkp_loc)) ) * cmplx(0.0_dp,-0.5_dp,kind=dp)
              enddo
           enddo
        enddo
