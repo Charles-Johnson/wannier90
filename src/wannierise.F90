@@ -93,7 +93,7 @@ contains
          fixed_step,lfixstep,write_proj,have_disentangled,conv_tol,num_proj, &
          conv_window,conv_noise_amp,conv_noise_num,wannier_centres,write_xyz, &
          wannier_spreads,omega_total,omega_tilde,optimisation,write_vdw_data,&
-         write_hr_diag,kpt_latt
+         write_hr_diag,kpt_latt, bk, ccentres_cart
     use w90_utility,    only : utility_frac_to_cart,utility_zgemm
     use w90_parameters, only : lsitesymmetry                !RS:
     use w90_sitesym,    only : sitesym_symmetrize_gradient  !RS:
@@ -318,6 +318,16 @@ contains
        call wann_phases(csheet,sheet,rguide,irguide)
        irguide=1
     endif
+
+    ! constrained centres part
+    
+    do nkp = 1, num_kpts
+       do nn=1,nntot
+          do n=1,num_wann
+             rcnkb(n, nn,nkp) = sum(bk(:,nn,nkp)*ccentres_cart(n,:))
+          end do
+       end do
+    end do
 
     ! calculate initial centers and spread
     call wann_omega(csheet,sheet,rave,r2ave,rave2,wann_spread)
@@ -2620,16 +2630,6 @@ contains
        sqwb=sqrt(wb(nn))
        m_w(:,:,2*nn-1)=sqwb*real(m_matrix(:,:,nn,1),dp)
        m_w(:,:,2*nn)=sqwb*aimag(m_matrix(:,:,nn,1))
-    end do
-
-    ! constrained centres part
-    
-    do nkp = 1, num_kpts
-       do nn=1,nntot
-          do n=1,num_wann
-             rcnkb(n, nn,nkp) = sum(bk(:,nn,nkp)*ccentres_cart(n,:))
-          end do
-       end do
     end do
 
     ! calculate initial centers and spread
