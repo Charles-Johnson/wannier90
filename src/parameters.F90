@@ -49,13 +49,14 @@ module w90_parameters
   integer,           public, save :: jprime
   !! Number of objective Wannier functions (others excluded from spread functional)
   real(kind=dp),     public, save :: lambdac
-  !! Lagrange multiplier for constraining centres
+  !! Global Lagrange multiplier for constraining centres
   real(kind=dp), dimension(1:3), public,save :: r0
   !! Constrained centres
   real(kind=dp), allocatable, public, save :: ccentres_frac(:,:)
   real(kind=dp), allocatable, public, save :: ccentres_cart(:,:)
   real(kind=dp), allocatable, public, save :: lambdas(:)
-  !! Centre constraints for each Wannier function. Co-ordinates of centre constraint defaults to centre of trial orbital. Lagrange multiplier defaults to zero.
+  !! Centre constraints for each Wannier function. Co-ordinates of centre constraint defaults
+  !! to centre of trial orbital. Individual Lagrange multipliers, lambdas, default to global Lagrange multiplier.
   character(len=50), public, save :: devel_flag
   ! Adaptive vs. fixed smearing stuff [GP, Jul 12, 2012]
   ! Only internal, always use the local variables defined by each module
@@ -4486,12 +4487,17 @@ contains
    end  subroutine param_get_range_vector
 
    subroutine param_get_centre_constraints
+     !=============================================================================!
+     !                                                                             !
+     !!  assigns projection centres as default centre constraints and global 
+     !!  Lagrange multiplier as individual Lagrange multipliers then reads
+     !!  the centre_constraints block for individual centre constraint parameters
+     !                                                                             !
+     !=============================================================================!
      use w90_io,        only : io_error
      use w90_utility,   only : utility_frac_to_cart
-     !integer           :: num_constraints
      integer           :: loop1, index1, constraint_num, index2, loop2
      integer           :: column, start, finish, wann, ierr
-     !logical           :: found
      character(len=maxlen) :: dummy     
      
      allocate( ccentres_frac(num_wann,3),stat=ierr)
@@ -4507,9 +4513,6 @@ contains
        end do 
      end do
      lambdas(:) = lambdac
-
-     !if (found .eqv. .false.) write(stdout, *) 'centre constraints not found in input file'
-     !if (found .eqv. .true.) write(stdout, *) 'centre constraints found in input file'
 
      constraint_num = 0
      do loop1=1, num_lines
@@ -4568,6 +4571,12 @@ contains
    end subroutine param_get_centre_constraints
 
    subroutine param_get_centre_constraint_from_column(column, start, finish, wann, dummy)
+     !===================================!
+     !                                   !
+     !!  assigns value read to constraint 
+     !!  parameters based on column
+     !                                   !
+     !===================================!
       use w90_io,        only : io_error   
       integer, intent(inout):: column, start, finish, wann
       character(len=maxlen), intent(inout):: dummy  
