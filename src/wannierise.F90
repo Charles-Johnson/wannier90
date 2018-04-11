@@ -1770,6 +1770,7 @@ contains
           do m = 1, jprime
              wann_spread%om_od = wann_spread%om_od + lambdas(m) * wb(nn) * &
                 ln_tmp_loc(m,nn,nkp_loc) ** 2
+                !! centre constraint contribution
           enddo
           do m = jprime + 1, num_wann
              wann_spread%om_od = wann_spread%om_od &
@@ -1801,6 +1802,7 @@ contains
     wann_spread%om_d = wann_spread%om_d / real(num_kpts,dp)
 
     wann_spread%om_nu = 0.0_dp
+    !! contribution from constrained centres
     do nkp_loc = 1, counts(my_node_id)
        nkp = nkp_loc + displs(my_node_id)
        do nn = 1, nntot
